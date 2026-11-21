@@ -1,0 +1,10 @@
+parameters:
+    level: 8
+    tmpDir: /tmp/phpstan
+    paths:
+        - bin
+        - config
+        - database/seed
+        - public
+        - src
+        - tests

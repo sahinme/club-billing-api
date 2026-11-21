@@ -1,0 +1,240 @@
+# Club Billing API: click-to-run requests
+#
+# The variables below sit before the first "###" on purpose: that makes them global for every request.
+#
+# PhpStorm / IntelliJ: open this file and press ▶ next to a request (no plugin needed).
+# Cursor / VS Code:    install the "httpyac" extension (anweber.vscode-httpyac), then "Send" above a request.
+#
+# Start the stack first: make up
+# Run top to bottom: the logins save their tokens for the requests below them.
+# Payments change the data. Reset it with: make seed
+#
+# Demo users all have the password "demo-password". Amounts are in cents (2000 = 20.00 EUR).
+
+@baseUrl = http://localhost:8080
+@password = demo-password
+
+
+### Health check (public)
+GET {{baseUrl}}/health
+
+> {%
+    client.test("200 OK", () => client.assert(response.status === 200));
+%}
+
+
+### Wrong password -> 401, same answer as an unknown email
+POST {{baseUrl}}/v1/auth/login
+Content-Type: application/json
+
+{"email": "frontdesk@amsterdam.test", "password": "wrong-password"}
+
+> {%
+    client.test("401", () => client.assert(response.status === 401));
+%}
+
+
+### Login: front desk staff, Amsterdam (can view and collect payments for the whole club)
+POST {{baseUrl}}/v1/auth/login
+Content-Type: application/json
+
+{"email": "frontdesk@amsterdam.test", "password": "{{password}}"}
+
+> {%
+    client.test("200", () => client.assert(response.status === 200));
+    client.global.set("deskToken", response.body.access_token);
+%}
+
+
+### Login: auditor, Amsterdam (read-only)
+POST {{baseUrl}}/v1/auth/login
+Content-Type: application/json
+
+{"email": "auditor@amsterdam.test", "password": "{{password}}"}
+
+> {%
+    client.global.set("auditorToken", response.body.access_token);
+%}
+
+
+### Login: front desk staff of ANOTHER club (Rotterdam)
+POST {{baseUrl}}/v1/auth/login
+Content-Type: application/json
+
+{"email": "frontdesk@rotterdam.test", "password": "{{password}}"}
+
+> {%
+    client.global.set("rotterdamToken", response.body.access_token);
+%}
+
+
+### Login: member Anna (can only see and pay her own invoices)
+POST {{baseUrl}}/v1/auth/login
+Content-Type: application/json
+
+{"email": "anna@amsterdam.test", "password": "{{password}}"}
+
+> {%
+    client.global.set("annaToken", response.body.access_token);
+%}
+
+
+### View invoice 1 (Anna, 49.99 EUR, open)
+GET {{baseUrl}}/v1/invoices/1
+Authorization: Bearer {{deskToken}}
+
+> {%
+    client.test("200", () => client.assert(response.status === 200));
+%}
+
+
+### No token -> 401
+POST {{baseUrl}}/v1/invoices/1/payments
+Content-Type: application/json
+Idempotency-Key: {{$random.uuid}}
+
+{"amount": 2000, "currency": "EUR", "payment_method": "pm_card_ok"}
+
+> {%
+    client.test("401", () => client.assert(response.status === 401));
+%}
+
+
+### Invalid input -> 422, every problem listed (no key, float amount, lowercase currency, raw card number)
+POST {{baseUrl}}/v1/invoices/1/payments
+Authorization: Bearer {{deskToken}}
+Content-Type: application/json
+
+{"amount": 20.5, "currency": "eur", "payment_method": "4111111111111111"}
+
+> {%
+    client.test("422", () => client.assert(response.status === 422));
+%}
+
+
+### Pay 20.00 of 49.99 -> 201
+# The pre-request script creates a fresh Idempotency-Key and keeps it for the retry below.
+< {%
+    // $random exists in PhpStorm; httpyac runs scripts in Node, where crypto is available instead.
+    const key = typeof $random !== "undefined" ? $random.uuid : require("crypto").randomUUID();
+    client.global.set("retryKey", key);
+%}
+POST {{baseUrl}}/v1/invoices/1/payments
+Authorization: Bearer {{deskToken}}
+Content-Type: application/json
+Idempotency-Key: {{retryKey}}
+
+{"amount": 2000, "currency": "EUR", "payment_method": "pm_card_ok"}
+
+> {%
+    client.test("201", () => client.assert(response.status === 201));
+    client.global.set("firstPaymentId", response.body.id);
+%}
+
+
+### Network retry with the SAME Idempotency-Key -> the same payment again, card not charged twice
+POST {{baseUrl}}/v1/invoices/1/payments
+Authorization: Bearer {{deskToken}}
+Content-Type: application/json
+Idempotency-Key: {{retryKey}}
+
+{"amount": 2000, "currency": "EUR", "payment_method": "pm_card_ok"}
+
+> {%
+    client.test("same payment, marked as replay", () => {
+        client.assert(response.status === 201);
+        client.assert(response.body.id === client.global.get("firstPaymentId"));
+        client.assert(response.headers.valueOf("Idempotent-Replayed") === "true");
+    });
+%}
+
+
+### Same key, different amount -> 422 idempotency_key_reused
+POST {{baseUrl}}/v1/invoices/1/payments
+Authorization: Bearer {{deskToken}}
+Content-Type: application/json
+Idempotency-Key: {{retryKey}}
+
+{"amount": 2500, "currency": "EUR", "payment_method": "pm_card_ok"}
+
+> {%
+    client.test("422", () => client.assert(response.status === 422));
+%}
+
+
+### Card declined -> 402, invoice 2 stays unpaid
+POST {{baseUrl}}/v1/invoices/2/payments
+Authorization: Bearer {{deskToken}}
+Content-Type: application/json
+Idempotency-Key: {{$random.uuid}}
+
+{"amount": 2500, "currency": "EUR", "payment_method": "pm_card_declined"}
+
+> {%
+    client.test("402", () => client.assert(response.status === 402));
+%}
+
+
+### Auditor (read-only role) tries to collect a payment -> 403
+POST {{baseUrl}}/v1/invoices/2/payments
+Authorization: Bearer {{auditorToken}}
+Content-Type: application/json
+Idempotency-Key: {{$random.uuid}}
+
+{"amount": 100, "currency": "EUR", "payment_method": "pm_card_ok"}
+
+> {%
+    client.test("403", () => client.assert(response.status === 403));
+%}
+
+
+### Staff of another club tries an Amsterdam invoice -> 404 (its existence is not revealed)
+POST {{baseUrl}}/v1/invoices/2/payments
+Authorization: Bearer {{rotterdamToken}}
+Content-Type: application/json
+Idempotency-Key: {{$random.uuid}}
+
+{"amount": 100, "currency": "EUR", "payment_method": "pm_card_ok"}
+
+> {%
+    client.test("404", () => client.assert(response.status === 404));
+%}
+
+
+### Member Anna tries to pay Bob's invoice -> 404
+POST {{baseUrl}}/v1/invoices/2/payments
+Authorization: Bearer {{annaToken}}
+Content-Type: application/json
+Idempotency-Key: {{$random.uuid}}
+
+{"amount": 100, "currency": "EUR", "payment_method": "pm_card_ok"}
+
+> {%
+    client.test("404", () => client.assert(response.status === 404));
+%}
+
+
+### Payment provider times out -> 202 pending (we never guess whether money moved)
+POST {{baseUrl}}/v1/invoices/4/payments
+Authorization: Bearer {{deskToken}}
+Content-Type: application/json
+Idempotency-Key: {{$random.uuid}}
+
+{"amount": 1000, "currency": "EUR", "payment_method": "pm_card_timeout"}
+
+> {%
+    client.test("202", () => client.assert(response.status === 202));
+%}
+
+
+### Another payment on invoice 4 while one is still pending -> 409
+POST {{baseUrl}}/v1/invoices/4/payments
+Authorization: Bearer {{deskToken}}
+Content-Type: application/json
+Idempotency-Key: {{$random.uuid}}
+
+{"amount": 1000, "currency": "EUR", "payment_method": "pm_card_ok"}
+
+> {%
+    client.test("409", () => client.assert(response.status === 409));
+%}

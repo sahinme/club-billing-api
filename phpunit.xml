@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         cacheDirectory="/tmp/phpunit-cache"
+         colors="true"
+         displayDetailsOnTestsThatTriggerWarnings="true"
+         failOnWarning="true"
+         failOnRisky="true">
+    <testsuites>
+        <testsuite name="unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="integration">
+            <directory>tests/Integration</directory>
+        </testsuite>
+    </testsuites>
+
+    <source>
+        <include>
+            <directory>src</directory>
+        </include>
+    </source>
+
+    <php>
+        <!-- Tests use their own database, never the demo data. -->
+        <env name="DB_NAME" value="club_billing_test" force="true"/>
+        <env name="APP_ENV" value="test" force="true"/>
+        <env name="LOG_LEVEL" value="emergency" force="true"/>
+        <env name="FAKE_GATEWAY_LATENCY_MS" value="0" force="true"/>
+    </php>
+</phpunit>

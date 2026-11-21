@@ -1,0 +1,10 @@
+.git
+.github
+vendor
+secrets
+.env
+.idea
+.vscode
+.DS_Store
+.phpunit.cache
+.php-cs-fixer.cache

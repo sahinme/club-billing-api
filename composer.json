@@ -1,0 +1,50 @@
+{
+    "name": "club-billing/api",
+    "description": "Small payments API for gym memberships: one request from HTTP to the database and back.",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": "~8.4.0",
+        "ext-json": "*",
+        "ext-pcntl": "*",
+        "ext-pdo": "*",
+        "ext-pdo_mysql": "*",
+        "ext-rdkafka": "*",
+        "monolog/monolog": "^3.8",
+        "php-di/php-di": "^7.0",
+        "ramsey/uuid": "^4.7",
+        "slim/psr7": "^1.7",
+        "slim/slim": "^4.14"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.75",
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^12.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "ClubBilling\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "ClubBilling\\Tests\\": "tests/",
+            "ClubBilling\\Database\\Seed\\": "database/seed/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "analyse": "phpstan analyse --memory-limit=512M --no-progress",
+        "cs": "php-cs-fixer fix --dry-run --diff",
+        "cs:fix": "php-cs-fixer fix",
+        "qa": [
+            "@cs",
+            "@analyse",
+            "@test"
+        ]
+    },
+    "config": {
+        "sort-packages": true,
+        "optimize-autoloader": true
+    }
+}
