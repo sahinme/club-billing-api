@@ -1,5 +1,7 @@
 # Club Billing API
 
+[![CI](https://github.com/sahinme/club-billing-api/actions/workflows/ci.yml/badge.svg)](https://github.com/sahinme/club-billing-api/actions/workflows/ci.yml)
+
 A small payments API for gym memberships, written in PHP 8.4.
 A front desk employee (or the member) pays an open invoice by card. The request goes through
 authentication, validation, authorization, a database transaction with row locking, a call to a
