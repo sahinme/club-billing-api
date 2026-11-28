@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---------- base: PHP + extensions, shared by every stage ----------
-FROM php:8.4-fpm-alpine AS base
+FROM php:8.6-fpm-alpine AS base
 
 # Installs PHP extensions together with the system libraries they need.
 COPY --from=mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /usr/local/bin/
